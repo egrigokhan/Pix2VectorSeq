@@ -13,8 +13,6 @@ import random
 
 import torch
 
-from dataset import CFG
-
 def seed_everything(seed=1234):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -391,21 +389,21 @@ def generateDataset(
 
 
 def generate_square_subsequent_mask(sz):
-    mask = (torch.triu(torch.ones((sz, sz), device=CFG.device))
+    mask = (torch.triu(torch.ones((sz, sz))) # device=CFG.device))
             == 1).transpose(0, 1)
     mask = mask.float().masked_fill(mask == 0, float(
         '-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
 
-def create_mask(tgt):
+def create_mask(tgt, pad_idx):
     """
     tgt: shape(N, L)
     """
     tgt_seq_len = tgt.shape[1]
 
-    tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
-    tgt_padding_mask = (tgt == CFG.pad_idx)
+    tgt_mask = generate_square_subsequent_mask(tgt_seq_len).to(CFG.device)
+    tgt_padding_mask = (tgt == pad_idx)
 
     return tgt_mask, tgt_padding_mask
 

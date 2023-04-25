@@ -5,10 +5,11 @@ from pix2vectorseq.bezier import Bezier
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def drawShapeFromPoints(
     points,
     smoothness=0.2,
-    kink=1        # multiplied by $\pi$
+    kink=1  #  multiplied by $\pi$
 ):
     #  define path array
     cp = {}
@@ -33,7 +34,7 @@ def drawShapeFromPoints(
         #  get the unit vector
         uv = unitVector(v)
 
-        #  kink angles
+        #   kink angles
         ka1 = math.pi * randomGaussian(0, kink)
         ka2 = math.pi * randomGaussian(0, kink)
 
@@ -61,29 +62,35 @@ def drawShapeFromPoints(
         p1 = points[i_1]
         p2 = points[i_2]
 
-        # add to path
+        #  add to path
         path.append([p, cp[i][0], cp[i_2][1], p2])
 
     return path
 
+
 def drawPath(
     path
 ):
-  # create figure
-  plt.figure()
+    #  create figure
+    plt.figure()
 
-  # loop over all path curves and draw
-  for i in range(len(path)):
+    #  set axis limits
+    plt.xlim(0, 0.5)
+    plt.ylim(0, 0.5)
 
-    t_points = np.arange(0, 1, 0.01) #................................. Creates an iterable list from 0 to 1.
-    points = np.array(path[i]) #.... Creates an array of coordinates.
-    curve = Bezier.Curve(t_points, points) #......................... Returns an array of coordinates.
-    
-    plt.plot(
-      curve[:, 0],   # x-coordinates.
-      curve[:, 1]    # y-coordinates.
-    )
+    #  loop over all path curves and draw
+    for i in range(len(path)):
 
-  plt.grid()
-  plt.show()
+        # ................................. Creates an iterable list from 0 to 1.
+        t_points = np.arange(0, 1, 0.01)
+        points = np.array(path[i])  # .... Creates an array of coordinates.
+        # ......................... Returns an array of coordinates.
+        curve = Bezier.Curve(t_points, points)
 
+        plt.plot(
+            curve[:, 0],    # y-coordinates.
+            curve[:, 1],   # x-coordinates.
+        )
+
+    plt.grid()
+    plt.show()

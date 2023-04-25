@@ -355,12 +355,13 @@ class VectorDatasetTest(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.image_paths)
 
+
 def postprocess(batch_preds, batch_confs, tokenizer):
     EOS_idxs = (batch_preds == tokenizer.EOS_code).float().argmax(dim=-1)
-    ## sanity check
+    # sanity check
     invalid_idxs = ((EOS_idxs - 1) % 5 != 0).nonzero().view(-1)
     EOS_idxs[invalid_idxs] = 0
-    
+
     all_bboxes = []
     all_labels = []
     all_confs = []
@@ -371,10 +372,11 @@ def postprocess(batch_preds, batch_confs, tokenizer):
             all_confs.append(None)
             continue
         labels, bboxes = tokenizer.decode(batch_preds[i, :EOS_idx+1])
-        confs = [round(batch_confs[j][i].item(), 3) for j in range(len(bboxes))]
-        
+        confs = [round(batch_confs[j][i].item(), 3)
+                 for j in range(len(bboxes))]
+
         all_bboxes.append(bboxes)
         all_labels.append(labels)
         all_confs.append(confs)
-        
+
     return all_bboxes, all_labels, all_confs

@@ -77,7 +77,7 @@ class Decoder(nn.Module):
         tgt: shape(N, L)
         """
         
-        tgt_mask, tgt_padding_mask = create_mask(tgt)
+        tgt_mask, tgt_padding_mask = create_mask(tgt, CFG.pad_idx)
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.decoder_pos_drop(
             tgt_embedding + self.decoder_pos_embed
@@ -102,7 +102,7 @@ class Decoder(nn.Module):
         length = tgt.size(1)
         padding = torch.ones(tgt.size(0), CFG.max_len-length-1).fill_(CFG.pad_idx).long().to(tgt.device)
         tgt = torch.cat([tgt, padding], dim=1)
-        tgt_mask, tgt_padding_mask = create_mask(tgt)
+        tgt_mask, tgt_padding_mask = create_mask(tgt, CFG.pad_idx)
         # is it necessary to multiply it by math.sqrt(d) ?
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.decoder_pos_drop(
