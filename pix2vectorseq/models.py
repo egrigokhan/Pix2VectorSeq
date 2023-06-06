@@ -1,33 +1,32 @@
+"""
+Mon Jun 5 2023
+"""
 import gc
-import os
-import cv2
 import math
+import os
 import random
-from glob import glob
-import numpy as np
-import pandas as pd
+import xml.etree.ElementTree as ET
 from functools import partial
-from tqdm import tqdm
-import matplotlib.pyplot as plt
+from glob import glob
 
 import albumentations as A
-import xml.etree.ElementTree as ET
-from sklearn.model_selection import StratifiedGroupKFold
-
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
-
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import timm
-from timm.models.layers import trunc_normal_
-
+import torch
+import torch.nn.functional as F
 import transformers
-from transformers import top_k_top_p_filtering
-from transformers import get_linear_schedule_with_warmup
-
-from dataset import CFG, load_dataset, VectorTokenizer, get_loaders
+from dataset import CFG, VectorTokenizer, get_loaders, load_dataset
+from sklearn.model_selection import StratifiedGroupKFold
+from timm.models.layers import trunc_normal_
+from torch import nn
+from torch.nn.utils.rnn import pad_sequence
+from tqdm import tqdm
+from transformers import get_linear_schedule_with_warmup, top_k_top_p_filtering
 from utils import create_mask
+
 
 class Encoder(nn.Module):
     def __init__(self, model_name='deit3_small_patch16_384_in21ft1k', pretrained=False, out_dim=256):
@@ -77,7 +76,7 @@ class Decoder(nn.Module):
         tgt: shape(N, L)
         """
         
-        tgt_mask, tgt_padding_mask = create_mask(tgt, CFG.pad_idx)
+        tgt_mask, tgt_padding_mask = create_mask(tgt)
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.decoder_pos_drop(
             tgt_embedding + self.decoder_pos_embed
@@ -102,7 +101,7 @@ class Decoder(nn.Module):
         length = tgt.size(1)
         padding = torch.ones(tgt.size(0), CFG.max_len-length-1).fill_(CFG.pad_idx).long().to(tgt.device)
         tgt = torch.cat([tgt, padding], dim=1)
-        tgt_mask, tgt_padding_mask = create_mask(tgt, CFG.pad_idx)
+        tgt_mask, tgt_padding_mask = create_mask(tgt)
         # is it necessary to multiply it by math.sqrt(d) ?
         tgt_embedding = self.embedding(tgt)
         tgt_embedding = self.decoder_pos_drop(

@@ -1,3 +1,6 @@
+"""
+Mon Jun 5 2023
+"""
 import gc
 import os
 import cv2
@@ -29,16 +32,16 @@ from transformers import get_linear_schedule_with_warmup
 
 class CFG:
     img_path = "/content/VOCdevkit/VOC2012/JPEGImages"
-    xml_path = "/content/VOCdevkit/VOC2012/Annotations"
+    xml_path =  "/content/VOCdevkit/VOC2012/Annotations"
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    
     max_len = 300
     img_size = 384
-    num_bins = 384  #  img_size
-
+    num_bins = 384 # img_size
+    
     batch_size = 10
     epochs = 10
-
+    
     model_name = 'deit3_small_patch16_384_in21ft1k'
     num_patches = 576
     lr = 1e-4
@@ -91,11 +94,9 @@ class VectorDataset(torch.utils.data.Dataset):
 
         img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
         if img.shape[2] == 4:     # we have an alpha channel
-            a1 = ~img[:, :, 3]        # extract and invert that alpha
-            # add up values (with clipping)
-            img = cv2.add(cv2.merge([a1, a1, a1, a1]), img)
-            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)[
-                :100, :100, :]    # strip alpha channel
+            a1 = ~img[:,:,3]        # extract and invert that alpha
+            img = cv2.add(cv2.merge([a1,a1,a1,a1]), img)   # add up values (with clipping)
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)[:, :, :]    # strip alpha channel
             img = cv2.resize(img, (384, 384))
 
         # img = img[..., ::-1]
@@ -116,9 +117,9 @@ class VectorDataset(torch.utils.data.Dataset):
             bboxes = transformed['bboxes']
             labels = transformed['labels']
         '''
-
+        
         img = torch.FloatTensor(img).permute(2, 0, 1)
-
+        
         if self.tokenizer is not None:
             seqs = self.tokenizer(np.array(objects), np.array(colors))
             seqs = torch.LongTensor(seqs)
@@ -129,33 +130,29 @@ class VectorDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.ids)
 
-
 def parse_sentence(sentence):
-    #  remove the <BOS> and <EOS> tokens
-    sentence = sentence.replace("  <CLR>", " <CLR>")
+    # remove the <BOS> and <EOS> tokens
+    # sentence = sentence.replace('<EOS>', '<EOS>')
+    sentence = sentence.replace('  <CLR>', ' <CLR>')
     sentence = sentence.split(' ')
     sentence.pop(0)
     sentence.pop(-1)
 
     sentence = np.array(sentence)
 
-    #  split by <OBJ> token
+    # split by <OBJ> token
     objects = np.split(sentence, np.where(sentence == '<OBJ>')[0])[1:]
     objects = [obj[1:] for obj in objects]
 
-    #  split each object by <CLR> token, first element is the object, second is the color
+    # split each object by <CLR> token, first element is the object, second is the color
     objects = [np.split(obj, np.where(obj == '<CLR>')[0]) for obj in objects]
 
-    #  remove the <CLR> token
-    objects = [[obj[obj != '<CLR>'] for obj in obj] for obj in objects]
-
-    #  convert the objects and colors to floats
-    objects = [[list(np.array(obj).astype('float32'))
-                for obj in obj] for obj in objects]
+    # convert the objects and colors to floats, keep '<FLAT>' as string
+    objects = [[[float(x) if (x != '<FLAT>' and x!= '<CLR>' and x!= ' ' and x != '') else x for x in part] for part in obj] for obj in objects]
 
     objects = np.array(objects)
 
-    return list(objects[:, 0]), list(objects[:, 1])
+    return list(np.array(list(objects[:, 0]))[:, :]), list(np.array(list(objects[:, 1]))[:, 1:])
 
 
 class VectorTokenizer:
@@ -175,35 +172,65 @@ class VectorTokenizer:
         # CLR - Color
         self.CLR_code = self.OBJ_code + 1
 
+        # FLAT - Flat
+        self.FLAT_code = self.CLR_code + 1
+
         #  EOS - End Of Sentence
-        self.EOS_code = self.CLR_code + 1
+        self.EOS_code = self.FLAT_code + 1
 
         # PAD - Padding
         self.PAD_code = self.EOS_code + 1
 
-        self.vocab_size = num_bins + 5
+        self.vocab_size = num_bins + 6
+
+    def replace_flat_with_value(self, array, replace_value):
+        for i in range(len(array)):
+            if isinstance(array[i], list):
+                array[i] = self.replace_flat_with_value(array[i], replace_value)
+            elif array[i] == '<FLAT>':
+                array[i] = replace_value
+        return array
+
+    def replace_value_with_flat(self, array, replace_value):
+        for i in range(len(array)):
+            if isinstance(array[i], list):
+                array[i] = self.replace_value_with_flat(array[i], replace_value)
+            elif array[i] == replace_value:
+                array[i] = self.FLAT_code  # assuming self.FLAT_code is defined and is the desired replacement
+        return array
+
 
     def quantize(self, x: np.array):
         """
         x is a real number in [0, 1]
         """
+        if x == '<FLAT>':
+          return x
         return (x * (self.num_bins - 1)).astype('int')
 
     def dequantize(self, x: np.array):
         """
         x is an integer between [0, num_bins-1]
         """
-        return x.astype('float32') / (self.num_bins - 1) - 50
+        return x.astype('float32') / (self.num_bins - 1)
 
     def __call__(self, objects: list, colors: list, shuffle=True):
         assert len(objects) == len(
             colors), "objects and colors must have the same length"
-        objects = np.array(objects)
-        colors = np.array(colors)
 
+        FLAT_VALUE = -99999  # Replace this with a value that doesn't naturally occur in your data
+        objects = np.array(objects)
+
+        flats = np.where(objects == '<FLAT>')
+
+        objects = np.where(objects == '<FLAT>', FLAT_VALUE, objects)
+
+        objects = np.array(objects).astype(np.float32)
+        colors = np.array(colors).astype(np.float32)
+        
         #  pick every even and odd number in objects
-        objects[:, ::2] = ((objects[:, ::2]) + 50) / (self.width)
-        objects[:, 1::2] = ((objects[:, 1::2]) + 50) / (self.height)
+        objects[:, ::2] = ((objects[:, ::2]) + 30) / (self.width + 60)
+        objects[:, 1::2] = ((objects[:, 1::2]) + 30) / (self.height + 60)
 
         #  pick every number in color
         colors = colors / 255
@@ -211,6 +238,8 @@ class VectorTokenizer:
         #  quantize the objects and colors
         objects = self.quantize(objects)[:self.max_len]
         colors = self.quantize(colors)[:self.max_len]
+
+        objects[flats] = self.FLAT_code
 
         if shuffle:
             rand_idxs = np.arange(0, len(objects))
@@ -231,6 +260,13 @@ class VectorTokenizer:
 
         tokenized = tokenized[:self.max_len - 1]
         tokenized.append(self.EOS_code)
+
+        for i in range(len(tokenized)):
+          if isinstance(tokenized[i], list):
+              self.replace_flat(tokenized[i])
+          else:
+              if tokenized[i] == '<FLAT>':
+                  tokenized[i] = self.FLAT_code
 
         return tokenized
 
@@ -261,10 +297,27 @@ class VectorTokenizer:
         #  remove the <CLR> tokens
         tokens = [[token[token != self.CLR_code]
                    for token in token] for token in tokens]
-
+        
+        tokens = np.array(tokens)
         #  dequantize the objects and colors
-        objects = [self.dequantize(token[0]) for token in tokens]
+        objects = np.array([np.array(token[0]) for token in tokens]).astype(np.int)
+
+        flats = objects == self.FLAT_code
+
+        objects = self.dequantize(objects)
+
         colors = [self.dequantize(token[1]) for token in tokens]
+
+        objects = np.where(objects == self.FLAT_code, -999999, objects)
+
+        objects = np.array(objects).astype(np.float32)
+        colors = np.array(colors).astype(np.float32)
+        
+        #  pick every even and odd number in objects
+        objects[:, ::2] =  objects[:, ::2] * (self.width + 60) - 30
+        objects[:, 1::2] = objects[:, 1::2] * (self.height + 60) - 30
+
+        objects[flats] = self.FLAT_code
 
         return objects, colors
 
@@ -329,11 +382,9 @@ class VectorDatasetTest(torch.utils.data.Dataset):
 
         img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
         if img.shape[2] == 4:     # we have an alpha channel
-            a1 = ~img[:, :, 3]        # extract and invert that alpha
-            # add up values (with clipping)
-            img = cv2.add(cv2.merge([a1, a1, a1, a1]), img)
-            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)[
-                :100, :100, :]    # strip alpha channel
+            a1 = ~img[:,:,3]        # extract and invert that alpha
+            img = cv2.add(cv2.merge([a1,a1,a1,a1]), img)   # add up values (with clipping)
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)[:, :, :]    # strip alpha channel
             img = cv2.resize(img, (384, 384))
 
         '''
@@ -347,7 +398,7 @@ class VectorDatasetTest(torch.utils.data.Dataset):
             bboxes = transformed['bboxes']
             labels = transformed['labels']
         '''
-
+        
         img = torch.FloatTensor(img).permute(2, 0, 1)
 
         return img
@@ -358,10 +409,10 @@ class VectorDatasetTest(torch.utils.data.Dataset):
 
 def postprocess(batch_preds, batch_confs, tokenizer):
     EOS_idxs = (batch_preds == tokenizer.EOS_code).float().argmax(dim=-1)
-    # sanity check
+    ## sanity check
     invalid_idxs = ((EOS_idxs - 1) % 5 != 0).nonzero().view(-1)
     EOS_idxs[invalid_idxs] = 0
-
+    
     all_bboxes = []
     all_labels = []
     all_confs = []
@@ -372,11 +423,10 @@ def postprocess(batch_preds, batch_confs, tokenizer):
             all_confs.append(None)
             continue
         labels, bboxes = tokenizer.decode(batch_preds[i, :EOS_idx+1])
-        confs = [round(batch_confs[j][i].item(), 3)
-                 for j in range(len(bboxes))]
-
+        confs = [round(batch_confs[j][i].item(), 3) for j in range(len(bboxes))]
+        
         all_bboxes.append(bboxes)
         all_labels.append(labels)
         all_confs.append(confs)
-
+        
     return all_bboxes, all_labels, all_confs
