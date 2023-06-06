@@ -3,7 +3,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from pix2vectorseq.draw import drawPath
+from pix2vectorseq.new_format import transform_matrix_from_old_to_new
 
 def test():
     path = [[[0.26109695, 0.26109695],
@@ -27,7 +27,7 @@ def test():
              [0.26892853, 0.2584839],
              [0.26109695, 0.26109695]]]
 
-    drawPath(path)
+    print(transform_matrix_from_old_to_new(path))
 
 
 if __name__ == '__main__':
