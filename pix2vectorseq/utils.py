@@ -13,6 +13,8 @@ import random
 
 import torch
 
+from dataset import CFG
+
 def seed_everything(seed=1234):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -20,6 +22,7 @@ def seed_everything(seed=1234):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
+
 
 def distance(
     p1,
@@ -247,6 +250,7 @@ def hasCusp(
 #  turn bezier curves into svg, and color in the path
 
 
+# turn bezier curves into svg, and color in the path 
 def bezierToSVG(
     curves,
     filename
@@ -269,37 +273,37 @@ def bezierToSVG(
     for i in range(len(curves)):
 
         #  get the points
-        p0 = curves[i][0]
-        p1 = curves[i][1]
-        p2 = curves[i][2]
-        p3 = curves[i][3]
+        p0 = np.array(curves[i][0]) * 3
+        p1 = np.array(curves[i][1]) * 3
+        p2 = np.array(curves[i][2]) * 3
+        p3 = np.array(curves[i][3]) * 3
 
         #  if the curve has a cusp, then write a line
         if hasCusp(p0, p1, p2, p3):
-            str_ += ('M ' + str(p0[0]) + ' ' + str(p0[1]) +
-                     ' L ' + str(p3[0]) + ' ' + str(p3[1]) + ' ')
+            str_ += ('M ' + str(p0[0]) + ' ' + str(p0[1]) + ' L ' + str(p3[0]) + ' ' + str(p3[1]) + ' ')
             #  otherwise, write a bezier curve
         else:
-            str_ += ('M ' + str(p0[0]) + ' ' + str(p0[1]) + ' C ' + str(p1[0]) + ' ' + str(
-                p1[1]) + ' ' + str(p2[0]) + ' ' + str(p2[1]) + ' ' + str(p3[0]) + ' ' + str(p3[1]) + ' ')
-
+            str_ += ('M ' + str(p0[0]) + ' ' + str(p0[1]) + ' C ' + str(p1[0]) + ' ' + str(p1[1]) + ' ' + str(p2[0]) + ' ' + str(p2[1]) + ' ' + str(p3[0]) + ' ' + str(p3[1]) + ' ')
+        
     #  write the path tag
     str_ = str_ + '" stroke-width="1" />'
 
-    #  write the polygon
-    str_ += (
-        f'" <polygon points="{" ".join([str(x[0][0]) + "," + str(x[0][1]) for x in curves])}" fill="black" stroke="none" />')
+    # write the polygon
+    str_ += (f'" <polygon points="{" ".join([str(x[0][0] * 3) + "," + str(x[0][1] * 3) for x in curves])}" fill="black" stroke="none" />')
 
     #  write the svg tag
     str_ += ('</svg>')
 
-    print(str_)
-
-    svg2png(bytestring=str_, write_to=filename)
-
+    svg2png(bytestring=str_,write_to=filename)
+    
     #  close the file
-    #  f.close()
+    # f.close()
 
+
+import pandas as pd
+from tqdm import tqdm
+import random
+import math
 
 """ 
     a function which will generate a sentence from a list of points
@@ -307,103 +311,99 @@ def bezierToSVG(
 
     example points: [[(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)], [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)], [(87, 15), (97.6, 18.0), (72.2, 50.0), (64, 60)], [(64, 60), (55.800000000000004, 70.0), (56.6, 68.0), (46, 65)], [(46, 65), (35.4, 62.0), (2.8000000000000007, 55.0), (11, 45)]]
  """
-
-
 def generateSentence(
     points
 ):
     #  get the sentence
     sentence = '<BOS> <OBJ> '
-
-    #  loop through the points
+    
+    # loop through the points
     for i in range(len(points)):
-        #  get the point
-        point = points[i]  #  [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)]
+        # get the point
+        obj = points[i] # [(11, 45), (19.2, 35.0), (76.4, 12.0), (87, 15)]
 
-        #  get the x and y for all 4 points
-        x1 = round(point[0][0], 2)
-        y1 = round(point[0][1], 2)
-        x2 = round(point[1][0], 2)
-        y2 = round(point[1][1], 2)
-        x3 = round(point[2][0], 2)
-        y3 = round(point[2][1], 2)
-        x4 = round(point[3][0], 2)
-        y4 = round(point[3][1], 2)
+        px = obj[0]
+        py = obj[1]
+        c0x = obj[2]
+        c0y = obj[3]
+        c1x = obj[4]
+        c1y = obj[5]
+        
+        if c1x == 999999:
+            # add the sentence
+            sentence += str(round(px, 2)) + ' ' + str(round(py, 2)) + ' ' + str(round(c0x, 2)) + ' ' + str(round(c0y, 2)) + ' ' + "<FLAT>" + ' ' + str(round(c1y, 2)) + ' '
 
-        #  add the sentence
-        sentence += str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + \
-            ' ' + str(x3) + ' ' + str(y3) + ' ' + str(x4) + ' ' + str(y4) + ' '
+        else:
+            sentence += str(round(px, 2)) + ' ' + str(round(py, 2)) + ' ' + str(round(c0x, 2)) + ' ' + str(round(c0y, 2)) + ' ' + str(round(c1x, 2)) + ' ' + str(round(c1y, 2)) + ' '
 
-    #  get the color
+    # get the color
     color = [0, 0, 0]
 
-    #  add color
-    sentence += ' <CLR> ' + \
-        str(color[0]) + ' ' + str(color[1]) + ' ' + str(color[2]) + ' '
+    # add color 
+    sentence += ' <CLR> ' + str(color[0]) + ' ' + str(color[1]) + ' ' + str(color[2]) + ' '
 
-    #  add the end of sentence token
+    # add the end of sentence token
     sentence += '<EOS>'
 
-    #  return the sentence
+    # return the sentence
     return sentence
-
 
 def generateDataset(
     bounds,
     numPointsArray
 ):
-    #  create the dataset
+    # create the dataset
     dataset = pd.DataFrame(columns=['image', 'sentence'])
 
-    #  loop through the images
+    # loop through the images
     for i in tqdm(range(10000)):
         try:
-            numPoints = random.choice(numPointsArray)
+          numPoints = random.choice(numPointsArray)
 
-            #  get the points
-            # randomQuadrantPoints(bounds, numPoints)
-            points = randomSegmentPoints(bounds, numPoints)
+          # get the points
+          points = randomSegmentPoints(bounds, numPoints) # randomQuadrantPoints(bounds, numPoints)
 
-            #  generate path
-            path = drawShapeFromPoints(10 * points, kink=0)[:numPoints]
+          # generate path
+          path_ = drawShapeFromPoints(np.array(points), flat_to_sharp_ratio=5)
 
-            #  get the image
-            filename = 'images/' + str(i) + '.png'
+          # format path
+          formatted_path = format_path(path_)
 
-            #  turn the curves into svg
-            bezierToSVG(path, filename)
+          path = transform_matrix(formatted_path)
 
-            #  get the sentence
-            sentence = generateSentence(path)
+          # get the image
+          filename = 'images/' + str(i) + '.png'
+          
+          #  turn the curves into svg
+          bezierToSVG(path, filename)
 
-            print(sentence)
+          # get the sentence
+          sentence = generateSentence(path_)
 
-            #  add the image and sentence to the dataset
-            dataset = dataset.append({'image': filename, 'sentence': sentence, 'objects': [
-                                     np.array(points).flatten()], 'colors': [[0, 0, 0]], 'id': i}, ignore_index=True)
-        except:
-            print("Error")
-
-    #  save the dataset
+          # add the image and sentence to the dataset
+          dataset = dataset.append({'image': filename, 'sentence': sentence, 'objects': [np.array(points).flatten()], 'colors': [[0, 0, 0]], 'id': i}, ignore_index=True)
+        except Exception as e:
+          print("Error", e)
+    
+    # save the dataset
     dataset.to_csv('dataset.csv', index=False)
 
-
 def generate_square_subsequent_mask(sz):
-    mask = (torch.triu(torch.ones((sz, sz))) # device=CFG.device))
+    mask = (torch.triu(torch.ones((sz, sz)))  #  device=CFG.device))
             == 1).transpose(0, 1)
     mask = mask.float().masked_fill(mask == 0, float(
         '-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
 
-def create_mask(tgt, pad_idx):
+def create_mask(tgt):
     """
     tgt: shape(N, L)
     """
     tgt_seq_len = tgt.shape[1]
 
-    tgt_mask = generate_square_subsequent_mask(tgt_seq_len).to(CFG.device)
-    tgt_padding_mask = (tgt == pad_idx)
+    tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
+    tgt_padding_mask = (tgt == CFG.pad_idx)
 
     return tgt_mask, tgt_padding_mask
 
@@ -429,3 +429,15 @@ class AvgMeter:
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group["lr"]
+
+def chunk_array(array):
+    # Chunk the array into groups of 8
+    chunks_of_8 = [list(array[i:i + 6]) for i in range(0, len(array), 6)]
+
+    # Chunk each group of 8 into pairs
+    """ result = []
+    for chunk in chunks_of_8:
+        pairs = [list(chunk[i:i + 2]) for i in range(0, len(chunk), 2)]
+        result.append(pairs) """
+
+    return chunks_of_8

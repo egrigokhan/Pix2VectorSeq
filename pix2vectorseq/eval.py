@@ -16,8 +16,10 @@ import timm
 import torch
 import torch.nn.functional as F
 import transformers
+from bezier import Bezier
 from dataset import (CFG, VectorDatasetTest, VectorTokenizer, get_loaders,
-                     load_dataset, postprocess)
+                     load_dataset, parse_sentence, postprocess)
+from draw import drawPath, drawShapeFromPoints, format_path, transform_matrix
 from models import Decoder, Encoder, EncoderDecoder
 from sklearn.model_selection import StratifiedGroupKFold
 from timm.models.layers import trunc_normal_
@@ -25,7 +27,9 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup, top_k_top_p_filtering
-from utils import AvgMeter, get_lr, seed_everything
+from utils import (AvgMeter, chunk_array, generate_random_concave_polygon,
+                   generateSentence, get_lr, randomSegmentPoints,
+                   seed_everything)
 
 
 def generate(model, x, tokenizer, max_len=50, top_k=0, top_p=1):
@@ -76,30 +80,35 @@ def eval(model_path='./best_valid_loss.pth', image_path='./test_images/0.png'):
     test_dataset = VectorDatasetTest(img_paths)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=len(img_paths), shuffle=False, num_workers=0)
-
-    all_bboxes = []
-    all_labels = []
-    all_confs = []
-
+    
     with torch.no_grad():
         for x in tqdm(test_loader):
             batch_preds, batch_confs = generate(
                 model, x, tokenizer, max_len=101, top_k=0, top_p=1)
-            print(batch_preds, batch_confs)
-            bboxes, labels, confs = postprocess(
-                batch_preds, batch_confs, tokenizer)
-            #  all_bboxes.extend(bboxes)
-            #  all_labels.extend(labels)
-            #  all_confs.extend(confs)
 
-    os.mkdir("results")
-    for i, (bboxes, labels, confs) in enumerate(zip(all_bboxes, all_labels, all_confs)):
-        img_path = img_paths[i]
-        img = cv2.imread(img_path)[..., ::-1]
-        img = cv2.resize(img, (CFG.img_size, CFG.img_size))
-        img = visualize(img, bboxes, labels, id2cls, show=False)
+            print(batch_preds.flatten().cpu().detach().numpy())
 
-        cv2.imwrite("results/" + img_path.split("/")[-1], img[..., ::-1])
+            decoded_objects, colors = tokenizer.decode(batch_preds.flatten().cpu().detach().numpy())
+
+            print(decoded_objects)
+
+            # replace all tokenizer.FLAT_code with 999999 using numpy
+            decoded_objects = np.where(decoded_objects == tokenizer.FLAT_code, 999999, decoded_objects)
+
+            print("Decoded objects (processed): ", decoded_objects)
+
+            chunked_objects = chunk_array(decoded_objects[0])
+
+            print("Chunked objects: ", chunked_objects)
+
+            formatted_path = format_path(chunked_objects)
+
+            print("Formatted path: ", formatted_path)
+
+            path = transform_matrix(formatted_path)
+
+            drawPath(path)
+
 
 
 """ 

@@ -132,7 +132,7 @@ class VectorDataset(torch.utils.data.Dataset):
 
 def parse_sentence(sentence):
     # remove the <BOS> and <EOS> tokens
-    # sentence = sentence.replace('<EOS>', '<EOS>')
+    # sentence = sentence.replace('<EOS>', ' <EOS>')
     sentence = sentence.replace('  <CLR>', ' <CLR>')
     sentence = sentence.split(' ')
     sentence.pop(0)
@@ -149,11 +149,12 @@ def parse_sentence(sentence):
 
     # convert the objects and colors to floats, keep '<FLAT>' as string
     objects = [[[float(x) if (x != '<FLAT>' and x!= '<CLR>' and x!= ' ' and x != '') else x for x in part] for part in obj] for obj in objects]
+    
+    # Split objects into obj_list and color_list
+    obj_list = [obj[0] for obj in objects]
+    color_list = [obj[1] if len(obj) > 1 else [] for obj in objects]
 
-    objects = np.array(objects)
-
-    return list(np.array(list(objects[:, 0]))[:, :]), list(np.array(list(objects[:, 1]))[:, 1:])
-
+    return obj_list, color_list
 
 class VectorTokenizer:
     def __init__(self, num_bins: int, width: int, height: int, max_len=500):
@@ -276,9 +277,13 @@ class VectorTokenizer:
         """
         mask = tokens != self.PAD_code
         tokens = tokens[mask]
-        tokens = tokens[1:-1]
         # assert len(tokens) % 5 == 0, "invalid tokens"
 
+        # remove everything after the first <EOS> token
+        tokens = tokens[:np.where(tokens == self.EOS_code)[0][0]]
+
+        tokens = tokens[1:]
+        
         objects = []
         colors = []
 
@@ -298,9 +303,9 @@ class VectorTokenizer:
         tokens = [[token[token != self.CLR_code]
                    for token in token] for token in tokens]
         
-        tokens = np.array(tokens)
+        # tokens = np.array(tokens)
         #  dequantize the objects and colors
-        objects = np.array([np.array(token[0]) for token in tokens]).astype(np.int)
+        objects = np.array([np.array(token[0]) for token in tokens]).astype(np.int32)
 
         flats = objects == self.FLAT_code
 
